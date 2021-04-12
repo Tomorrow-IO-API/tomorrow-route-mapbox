@@ -12,8 +12,7 @@ class App extends React.Component {
     // ideally the request will be proxied by another server-side service, keeping the key secure
     apikey: "add your API key here",
     // grab your mapbox token from account.mapbox.com/
-    token:
-      "add your Mapbox token here",
+    token: "add your Mapbox token here",
     // list the fields, since we're querying polylines (route legs) you can also specify Min/Max/Avg suffixes
     fields: ["precipitationIntensity"],
   };
@@ -112,8 +111,21 @@ class App extends React.Component {
                 );
               });
             });
-            // save legs data, to be used when rendering the map
-            this.setState({ legs });
+            // save legs data in a standard geojson data, to be visualized on the map - stylized by properties
+            this.setState({
+              legs: {
+                type: "FeatureCollection",
+                features: legs.map((leg) => ({
+                  type: "Feature",
+                  properties: {
+                    ...leg.values,
+                    ...this.calculateRisk(leg.values),
+                    duration: leg.duration,
+                  },
+                  geometry: leg.location,
+                })),
+              },
+            });
           })
           .catch(function (error) {
             console.log(error);
@@ -136,44 +148,31 @@ class App extends React.Component {
   onEditorSelect = ({ selectedFeature }) => {
     this.setState({ selectedFeature });
   };
-  
-  calculateRisk = ({precipitationIntensity}) => {
+
+  calculateRisk = ({ precipitationIntensity }) => {
     // violent rain (>50mm/hr)
-    if (precipitationIntensity > 50){
-      return 3;
-    }    
-    // heavy rain (10-50mm/hr)
-    if (precipitationIntensity > 10 && precipitationIntensity <=50){
-      return 3;
-    }    
-    // moderate rain (2.5-10mm/hr)
-    if (precipitationIntensity > 2.5 && precipitationIntensity <=10){
-      return 2;
-    }    
-    // light rain (<2.5mm/hr), low windgust
-    if (precipitationIntensity <= 2.5){
-      return 1;
+    if (precipitationIntensity > 50) {
+      return { risk: 4, color: "#B80D09" };
     }
-    return 0;
-  }
+    // heavy rain (10-50mm/hr)
+    if (precipitationIntensity > 10 && precipitationIntensity <= 50) {
+      return { risk: 3, color: "#EB002C" };
+    }
+    // moderate rain (2.5-10mm/hr)
+    if (precipitationIntensity > 2.5 && precipitationIntensity <= 10) {
+      return { risk: 2, color: "#FF7800" };
+    }
+    // light rain (<2.5mm/hr), low windgust
+    if (precipitationIntensity <= 2.5) {
+      return { risk: 1, color: "#FFFF42" };
+    }
+    return { risk: 0, color: "#91A6DA" };
+  };
 
   render() {
     const { viewport, features, mode, legs, settings } = this.state;
     const { token } = this.props;
-    // convert legs into standard geojson data, to be visualized on the map - stylized by properties
-    const data = legs && {
-      type: "FeatureCollection",
-      features: legs.map((leg) => ({
-        type: "Feature",
-        properties: {
-          ...leg.values,
-          risk: this.calculateRisk(leg.values),
-          duration: leg.duration,
-        },
-        geometry: leg.location,
-      })),
-    };
-    data && console.log(data);
+    legs && console.log(legs);
     return (
       <div style={{ height: "100vh" }}>
         <div
@@ -228,23 +227,16 @@ class App extends React.Component {
             position="top-left"
           />
           {legs && (
-            <Source type="geojson" data={data}>
+            <Source type="geojson" data={legs}>
               <Layer
                 {...{
                   id: "data",
                   type: "line",
                   paint: {
                     "line-color": {
-                      property: "risk",
-                      stops: [
-                        [0, "#91A6DA"], // unknown
-                        [1, "#FFFF42"], // minor
-                        [2, "#FF7800"], // moderate
-                        [3, "#EB002C"], // severe
-                        [4, "#B80D09"], // extreme
-                      ],
+                      property: ["get", "color"],
                     },
-                    "line-width": 3
+                    "line-width": 3,
                   },
                 }}
               />
